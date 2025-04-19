@@ -40,6 +40,8 @@ def get_rs(sig):
     return r, s
 #==============================================================================
 def split_sig_pieces(script):
+    if len(script) < 4:
+        raise ValueError("Invalid script length")
     sigLen = int(script[2:4], 16)
     sig = script[2+2:2+sigLen*2]
     r, s = get_rs(sig[4:])
@@ -57,8 +59,22 @@ def parseTx(txn):
     inp_list = []
     ver = txn[:8]
     if txn[8:12] == '0001':
-        print('UnSupported Tx Input. Presence of Witness Data')
-        sys.exit(1)
+        print('Presence of Witness Data')
+        # Handle witness data separately
+        inp_nu = int(txn[12:14], 16)
+        first = txn[0:14]
+        cur = 14
+        for m in range(inp_nu):
+            prv_out = txn[cur:cur+64]
+            var0 = txn[cur+64:cur+64+8]
+            cur = cur+64+8
+            scriptLen = int(txn[cur:cur+2], 16)
+            script = txn[cur:2+cur+2*scriptLen] #8b included
+            seq = txn[2+cur+2*scriptLen:10+cur+2*scriptLen]
+            inp_list.append([prv_out, var0, script, seq])
+            cur = 10+cur+2*scriptLen
+        rest = txn[cur:]
+        return [first, inp_list, rest]
     inp_nu = int(txn[8:10], 16)
     
     first = txn[0:10]
@@ -108,7 +124,7 @@ def getSignableTxn(parsed):
 #==============================================================================
 def HASH160(pubk_hex):
     iscompressed = True if len(pubk_hex) < 70 else False
-    P = ice.pub2upub(pubk_hex)
+    P = ice.pubkey_to_h160(pubk_hex)
     return ice.pubkey_to_h160(0, iscompressed, P).hex()
 #==============================================================================
 

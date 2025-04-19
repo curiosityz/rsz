@@ -7,6 +7,7 @@ import sys
 import secp256k1 as ice
 import argparse
 from urllib.request import urlopen
+import hashlib
 #==============================================================================
 parser = argparse.ArgumentParser(description='This tool helps to get ECDSA Signature r,s,z values from Bitcoin rawtx or txid', 
                                  epilog='Enjoy the program! :)    Tips BTC: bc1q39meky2mn5qjq704zz0nnkl0v7kj4uz6r529at')
@@ -35,6 +36,8 @@ def get_rs(sig):
     return r, s
     
 def split_sig_pieces(script):
+    if len(script) < 4:
+        raise ValueError("Invalid script length")
     sigLen = int(script[2:4], 16)
     sig = script[2+2:2+sigLen*2]
     r, s = get_rs(sig[4:])
@@ -52,8 +55,11 @@ def parseTx(txn):
     inp_list = []
     ver = txn[:8]
     if txn[8:12] == '0001':
-        print('UnSupported Tx Input. Presence of Witness Data')
-        sys.exit(1)
+        print('Presence of Witness Data')
+        # Handle witness data separately
+        # Add debugging and logging for witness data
+        print(f"Debug: Witness Data - {txn}")
+        return [ver, [], txn[8:]]
     inp_nu = int(txn[8:10], 16)
     
     first = txn[0:10]
@@ -97,14 +103,17 @@ def getSignableTxn(parsed):
                 e += '00'
             e += inp_list[i][5] # seq
         e += rest + "01000000"
-        z = ice.get_sha256(ice.get_sha256(bytes.fromhex(e))).hex()
+        z = hashlib.sha256(hashlib.sha256(bytes.fromhex(e)).digest()).hexdigest()
         res.append([inp_list[one][2], inp_list[one][3], z, inp_list[one][4], e])
     return res
 #==============================================================================
 def HASH160(pubk_hex):
-    iscompressed = True if len(pubk_hex) < 70 else False
-    P = ice.pub2upub(pubk_hex)
-    return ice.pubkey_to_h160(0, iscompressed, P).hex()
+    sha = hashlib.new('sha256')
+    sha.update(bytes.fromhex(pubk_hex))
+    sha_digest = sha.digest()
+    rip = hashlib.new('ripemd160')
+    rip.update(sha_digest)
+    return rip.hexdigest()
 #==============================================================================
 
 #txn = '01000000028370ef64eb83519fd14f9d74826059b4ce00eae33b5473629486076c5b3bf215000000008c4930460221009bf436ce1f12979ff47b4671f16b06a71e74269005c19178384e9d267e50bbe9022100c7eabd8cf796a78d8a7032f99105cdcb1ae75cd8b518ed4efe14247fb00c9622014104e3896e6cabfa05a332368443877d826efc7ace23019bd5c2bc7497f3711f009e873b1fcc03222f118a6ff696efa9ec9bb3678447aae159491c75468dcc245a6cffffffffb0385cd9a933545628469aa1b7c151b85cc4a087760a300e855af079eacd25c5000000008b48304502210094b12a2dd0f59b3b4b84e6db0eb4ba4460696a4f3abf5cc6e241bbdb08163b45022007eaf632f320b5d9d58f1e8d186ccebabea93bad4a6a282a3c472393fe756bfb014104e3896e6cabfa05a332368443877d826efc7ace23019bd5c2bc7497f3711f009e873b1fcc03222f118a6ff696efa9ec9bb3678447aae159491c75468dcc245a6cffffffff01404b4c00000000001976a91402d8103ac969fe0b92ba04ca8007e729684031b088ac00000000'
